@@ -1,0 +1,6 @@
+{
+  "name": "Try Leveling UP",
+  "description": "Solo Leveling Gamified Fitness & Productivity Focus Hub",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
