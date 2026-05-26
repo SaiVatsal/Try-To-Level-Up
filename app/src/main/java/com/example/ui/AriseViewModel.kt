@@ -105,50 +105,227 @@ class AriseViewModel(application: Application) : AndroidViewModel(application) {
     val pushUpRestTimeLeft = MutableStateFlow(30)
     private var pushUpRestJob: Job? = null
 
+    // --- Automatic Sensor & Exercise Selection ---
+    val selectedExerciseType = MutableStateFlow("Push-ups") // "Push-ups", "Pull-ups", "Squats"
+    val isAutoSensingEnabled = MutableStateFlow(false)
+    val isSandboxSensorSimulationEnabled = MutableStateFlow(false)
+
+    // --- Dynamic Security / Bug Lockdown Isolation ---
+    val isSystemMutedWithBugs = MutableStateFlow(false)
+    val isCameraAccessBlockedByBug = MutableStateFlow(false)
+    val isMicrophoneAccessBlockedByBug = MutableStateFlow(false)
+
+    private var sensorManager: android.hardware.SensorManager? = null
+    private var proximitySensor: android.hardware.Sensor? = null
+    private var accelerometer: android.hardware.Sensor? = null
+    private var lastProximityValue: Float = -1f
+    private var lastAccelY: Float = 0f
+    private var peakDetected = false
+    private var simulationJob: Job? = null
+
+    private val sensorEventListener = object : android.hardware.SensorEventListener {
+        override fun onSensorChanged(event: android.hardware.SensorEvent?) {
+            try {
+                if (event == null || !isAutoSensingEnabled.value || isPushUpResting.value || !isPushUpActive.value) return
+                
+                if (event.sensor.type == android.hardware.Sensor.TYPE_PROXIMITY) {
+                    if (event.values != null && event.values.isNotEmpty()) {
+                        val value = event.values[0]
+                        val maxRange = event.sensor.maximumRange
+                        if (value < maxRange && lastProximityValue >= maxRange) {
+                            incrementRepFromSensor("Proximity sensor chest-dip")
+                        }
+                        lastProximityValue = value
+                    }
+                } else if (event.sensor.type == android.hardware.Sensor.TYPE_ACCELEROMETER) {
+                    if (event.values != null && event.values.size > 1) {
+                        val y = event.values[1]
+                        if (y > 13f && !peakDetected) {
+                            peakDetected = true
+                        } else if (y < 7f && peakDetected) {
+                            peakDetected = false
+                            incrementRepFromSensor("Motion sensor height pulls")
+                        }
+                        lastAccelY = y
+                    }
+                }
+            } catch (t: Throwable) {
+                android.util.Log.e("AriseViewModel", "Sensor event processing failure", t)
+            }
+        }
+
+        override fun onAccuracyChanged(sensor: android.hardware.Sensor?, accuracy: Int) {}
+    }
+
+    private fun incrementRepFromSensor(source: String) {
+        val current = pushUpReps.value
+        val currentDay = playerStats.value?.dayCount ?: 1
+        val target = 100 + currentDay - 1
+        if (current < target) {
+            pushUpReps.value++
+            val updated = pushUpReps.value
+            speak("Rep $updated detected via $source!")
+            if (updated == target) {
+                completePushUpProtocol(target)
+            } else if (updated % 10 == 0) {
+                speak("Incredible flow, Sai! Count is at $updated reps!")
+            }
+        }
+    }
+
+    fun startAutoSensing(context: android.content.Context) {
+        try {
+            if (sensorManager == null) {
+                sensorManager = context.getSystemService(android.content.Context.SENSOR_SERVICE) as android.hardware.SensorManager
+            }
+            sensorManager?.let { sm ->
+                proximitySensor = sm.getDefaultSensor(android.hardware.Sensor.TYPE_PROXIMITY)
+                accelerometer = sm.getDefaultSensor(android.hardware.Sensor.TYPE_ACCELEROMETER)
+                
+                proximitySensor?.let {
+                    sm.registerListener(sensorEventListener, it, android.hardware.SensorManager.SENSOR_DELAY_UI)
+                }
+                accelerometer?.let {
+                    sm.registerListener(sensorEventListener, it, android.hardware.SensorManager.SENSOR_DELAY_UI)
+                }
+            }
+            isAutoSensingEnabled.value = true
+            speak("Automatic motion recognition systems connected.")
+        } catch (t: Throwable) {
+            android.util.Log.e("AriseViewModel", "Failed to start auto sensing safely", t)
+        }
+    }
+
+    fun stopAutoSensing() {
+        try {
+            isAutoSensingEnabled.value = false
+            sensorManager?.unregisterListener(sensorEventListener)
+            speak("Motion tracking standby.")
+        } catch (t: Throwable) {
+            android.util.Log.e("AriseViewModel", "Failed to stop auto sensing safely", t)
+        }
+    }
+
+    fun setSandboxSimulationEnabled(enabled: Boolean) {
+        isSandboxSensorSimulationEnabled.value = enabled
+        simulationJob?.cancel()
+        if (enabled) {
+            speak("Auto-detect simulation loop engaged.")
+            simulationJob = viewModelScope.launch {
+                while (isSandboxSensorSimulationEnabled.value && isPushUpActive.value && !isPushUpResting.value) {
+                    delay(2500)
+                    val currentDay = playerStats.value?.dayCount ?: 1
+                    val target = 100 + currentDay - 1
+                    if (pushUpReps.value < target) {
+                        pushUpReps.value++
+                        val current = pushUpReps.value
+                        speak("Rep $current recognized.")
+                        if (current == target) {
+                            completePushUpProtocol(target)
+                        }
+                    } else {
+                        break
+                    }
+                }
+            }
+        } else {
+            speak("Simulation standby.")
+        }
+    }
+
+    fun triggerSystemBugCrashIsolation(active: Boolean) {
+        isSystemMutedWithBugs.value = active
+        isCameraAccessBlockedByBug.value = active
+        isMicrophoneAccessBlockedByBug.value = active
+        if (active) {
+            speak("Warning! System structural exception detected! Standard services, Camera sensors, and Voice microphone channels isolated immediately to prevent mind data leakage!")
+        } else {
+            speak("Aegis clear. All gates re-established.")
+        }
+    }
+
     private var tts: android.speech.tts.TextToSpeech? = null
     val isTtsReady = MutableStateFlow(false)
 
     private var timerJob: Job? = null
 
     init {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                com.example.network.FirebaseManager.init(application)
+            } catch (e: Throwable) {
+                android.util.Log.e("AriseViewModel", "Firebase init failure safely caught", e)
+            }
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                combine(
+                    playerStats,
+                    todayQuests,
+                    todayWorkouts,
+                    todayFoodLogs
+                ) { stats, quests, workouts, food ->
+                    if (com.example.network.FirebaseManager.isConfigured.value) {
+                        com.example.network.FirebaseManager.syncDataToFirebase(stats, quests, workouts, food)
+                    }
+                }.collect()
+            } catch (e: Throwable) {
+                android.util.Log.e("AriseViewModel", "Firebase dynamic integration fail safe", e)
+            }
+        }
+
         repository.setOnLevelUpCallback {
             viewModelScope.launch(Dispatchers.Main) {
-                isLevelUpScreenActive.value = true
+                try {
+                    isLevelUpScreenActive.value = true
+                } catch (e: Throwable) {
+                    android.util.Log.e("AriseViewModel", "LevelUp display exception safely bypassed", e)
+                }
             }
         }
         try {
             tts = android.speech.tts.TextToSpeech(application) { status ->
-                if (status == android.speech.tts.TextToSpeech.SUCCESS) {
-                    tts?.language = java.util.Locale.US
-                    isTtsReady.value = true
+                try {
+                    if (status == android.speech.tts.TextToSpeech.SUCCESS) {
+                        tts?.language = java.util.Locale.US
+                        isTtsReady.value = true
+                    }
+                } catch (t: Throwable) {
+                    android.util.Log.e("AriseViewModel", "TTS callbacks setup error", t)
                 }
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
+        } catch (e: Throwable) {
+            android.util.Log.e("AriseViewModel", "TTS runtime creation failure", e)
         }
-        viewModelScope.launch {
-            // Seed sample blocked apps including YouTube & Games
-            if (db.blockedAppDao().getAllBlockedAppsDirect().isEmpty()) {
-                val defaults = listOf(
-                    BlockedApp("Instagram", "Instagram Reels", 15, 0),
-                    BlockedApp("YouTube", "YouTube / Shorts", 20, 0),
-                    BlockedApp("Twitter", "Twitter (X)", 10, 0),
-                    BlockedApp("com.tencent.ig", "PUBG Mobile (Game)", 0, 0),
-                    BlockedApp("com.miHoYo.GenshinImpact", "Genshin Impact (Game)", 0, 0),
-                    BlockedApp("com.roblox.client", "Roblox (Game)", 0, 0)
-                )
-                repository.updateBlockedApps(defaults)
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // Seed sample blocked apps including YouTube & Games
+                if (db.blockedAppDao().getAllBlockedAppsDirect().isEmpty()) {
+                    val defaults = listOf(
+                        BlockedApp("Instagram", "Instagram Reels", 15, 0),
+                        BlockedApp("YouTube", "YouTube / Shorts", 20, 0),
+                        BlockedApp("Twitter", "Twitter (X)", 10, 0),
+                        BlockedApp("com.tencent.ig", "PUBG Mobile (Game)", 0, 0),
+                        BlockedApp("com.miHoYo.GenshinImpact", "Genshin Impact (Game)", 0, 0),
+                        BlockedApp("com.roblox.client", "Roblox (Game)", 0, 0)
+                    )
+                    repository.updateBlockedApps(defaults)
+                }
+                // Sync player initialization
+                repository.getOrCreatePlayerStats()
+                repository.initializeDailyQuests(getTodayDateString())
+            } catch (e: Throwable) {
+                android.util.Log.e("AriseViewModel", "Local Database seeding safely isolated", e)
             }
-            // Sync player initialization
-            repository.getOrCreatePlayerStats()
-            repository.initializeDailyQuests(getTodayDateString())
         }
     }
 
     fun speak(text: String) {
         try {
-            tts?.speak(text, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, null)
-        } catch (e: Exception) {
+            if (isTtsReady.value && tts != null && !isSystemMutedWithBugs.value) {
+                tts?.speak(text, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, null)
+            }
+        } catch (e: Throwable) {
             e.printStackTrace()
         }
     }
@@ -186,10 +363,11 @@ class AriseViewModel(application: Application) : AndroidViewModel(application) {
     fun completePushUpProtocol(repsDone: Int) {
         viewModelScope.launch {
             repository.addXp(50, "STR")
+            val exerciseType = selectedExerciseType.value
             repository.insertWorkout(
                 WorkoutLog(
                     date = getTodayDateString(),
-                    exerciseName = "Saitama Push-up Overload Protocol",
+                    exerciseName = "Saitama $exerciseType Overload Protocol",
                     sets = 5,
                     reps = repsDone,
                     weightKg = 0f,
@@ -201,7 +379,7 @@ class AriseViewModel(application: Application) : AndroidViewModel(application) {
             isPushUpActive.value = false
             pushUpReps.value = 0
             
-            speak("System alert: Daily pushup trial completed! Level up progress initiated. Excellent work Sai Vatsal.")
+            speak("System alert: Daily $exerciseType trial completed! Level up progress initiated. Excellent work Sai Vatsal.")
             questCompleteMessage.value = "⚔️ OVERLOAD TRIAL CLEARED! +50 STR XP"
             delay(4000)
             questCompleteMessage.value = null
@@ -426,6 +604,11 @@ class AriseViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         super.onCleared()
+        try {
+            sensorManager?.unregisterListener(sensorEventListener)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
         try {
             tts?.shutdown()
         } catch (e: Exception) {

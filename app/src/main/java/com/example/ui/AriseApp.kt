@@ -88,7 +88,96 @@ fun AriseApp() {
     val activeDoomscrollApp by viewModel.doomscrollActiveApp.collectAsState()
     val doomscrollCountdown by viewModel.doomscrollProgressSeconds.collectAsState()
 
-    Scaffold(
+    val authState by com.example.network.FirebaseManager.authState.collectAsState()
+    val isSystemMutedWithBugs by viewModel.isSystemMutedWithBugs.collectAsState()
+
+    if (authState !is com.example.network.UserSessionState.LoggedIn) {
+        AuthScreen(viewModel = viewModel)
+    } else if (isSystemMutedWithBugs) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xFF0F0407))
+                .padding(24.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(2.dp, SystemRed, RoundedCornerShape(16.dp))
+                    .background(Color.Black.copy(alpha = 0.9f))
+                    .padding(24.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Error,
+                    contentDescription = "Threat Detected",
+                    tint = SystemRed,
+                    modifier = Modifier.size(72.dp)
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "🚨 CORRUPTED SECTOR BLOCKED",
+                    color = SystemRed,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "VULNERABILITY ID: CHANGER_SHIELD_SHADOW_SYS_403",
+                    color = Color.Gray,
+                    fontSize = 11.sp,
+                    fontFamily = FontFamily.Monospace,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(20.dp))
+                Text(
+                    text = "A potential security exception or software bug has been detected inside the active subsystem compiled on May 26, 2026.",
+                    color = Color.White,
+                    fontSize = 13.sp,
+                    fontFamily = FontFamily.Monospace,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 18.sp
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "🛡️ SHIELD MITIGATION DEPLOYED:\n\n" +
+                            "❌ Standard System UI: SUSPENDED\n" +
+                            "❌ Camera Hardware Scanners: LOCKED DOWN\n" +
+                            "❌ Voice Microphone Channels: BLOCKED\n" +
+                            "❌ External File Sync: SAFE-ISOLATED",
+                    color = EpicGold,
+                    fontSize = 12.sp,
+                    fontFamily = FontFamily.Monospace,
+                    textAlign = TextAlign.Start,
+                    lineHeight = 18.sp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF1E0A0F))
+                        .padding(14.dp)
+                        .border(1.dp, SystemRed.copy(alpha = 0.4f), RoundedCornerShape(4.dp))
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+                Button(
+                    onClick = { viewModel.triggerSystemBugCrashIsolation(false) },
+                    colors = ButtonDefaults.buttonColors(containerColor = SystemRed),
+                    modifier = Modifier.fillMaxWidth().height(48.dp)
+                ) {
+                    Text(
+                        text = "🛠️ OVERRIDE / EXCEPTION RE-SOLVE",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
+        }
+    } else {
+        Scaffold(
         bottomBar = {
             NavigationBar(
                 containerColor = PitchBlack,
@@ -296,6 +385,7 @@ fun AriseApp() {
             }
         }
     }
+    }
 }
 
 // ==========================================
@@ -321,7 +411,7 @@ fun HudScreen(viewModel: AriseViewModel, navController: NavController) {
             ) {
                 Column {
                     Text(
-                        text = "ARISE",
+                        text = "Try Leveling UP",
                         color = ElectricBlue,
                         fontSize = 28.sp,
                         fontWeight = FontWeight.Black,
@@ -339,30 +429,52 @@ fun HudScreen(viewModel: AriseViewModel, navController: NavController) {
                     )
                 }
                 
-                // Fire Streak Display
-                val streakVal = stats?.streak ?: 1
                 Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(ElectricPurple.copy(alpha = 0.2f))
-                        .border(1.dp, ElectricPurple, RoundedCornerShape(8.dp))
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Filled.LocalFireDepartment,
-                        contentDescription = "Active Streak",
-                        tint = ElectricBlue,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "${streakVal}D STREAK",
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 11.sp,
-                        fontFamily = FontFamily.Monospace
-                    )
+                    // Fire Streak Display
+                    val streakVal = stats?.streak ?: 1
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(ElectricPurple.copy(alpha = 0.2f))
+                            .border(1.dp, ElectricPurple, RoundedCornerShape(8.dp))
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.LocalFireDepartment,
+                            contentDescription = "Active Streak",
+                            tint = ElectricBlue,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "${streakVal}D STREAK",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+
+                    // Logout Icon Button
+                    IconButton(
+                        onClick = { com.example.network.FirebaseManager.logout() },
+                        modifier = Modifier
+                            .size(34.dp)
+                            .clip(CircleShape)
+                            .background(SystemRed.copy(alpha = 0.15f))
+                            .border(1.dp, SystemRed.copy(alpha = 0.8f), CircleShape)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Logout,
+                            contentDescription = "Disconnect Gates",
+                            tint = SystemRed,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                 }
             }
         }
@@ -910,6 +1022,9 @@ fun WorkoutScreen(viewModel: AriseViewModel) {
     var weightVal by remember { mutableStateOf("60") }
 
     if (isPushUpActive) {
+        val selectedEx by viewModel.selectedExerciseType.collectAsState()
+        val isCameraBlocked by viewModel.isCameraAccessBlockedByBug.collectAsState()
+        
         // Immersive camera-assisted split-screen push-up panel
         Box(
             modifier = Modifier
@@ -931,7 +1046,7 @@ fun WorkoutScreen(viewModel: AriseViewModel) {
                 ) {
                     Column {
                         Text(
-                            text = "⚔️ SAITAMA'S OVERLOAD TRIAL",
+                            text = "⚔️ SAITAMA'S ${selectedEx.uppercase()} TRIAL",
                             color = EpicGold,
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
@@ -951,6 +1066,45 @@ fun WorkoutScreen(viewModel: AriseViewModel) {
                     }
                 }
 
+                // Exercise selection row
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color.Black)
+                        .border(1.dp, ElectricPurple.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                        .padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val exercises = listOf("Push-ups", "Pull-ups", "Squats", "Sit-ups")
+                    exercises.forEach { ex ->
+                        val isSel = selectedEx == ex
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (isSel) ElectricPurple.copy(alpha = 0.3f) else Color.Transparent)
+                                .border(1.dp, if (isSel) ElectricBlue else Color.Transparent, RoundedCornerShape(6.dp))
+                                .clickable {
+                                    viewModel.selectedExerciseType.value = ex
+                                    viewModel.speak("Selected exercise target: $ex")
+                                }
+                                .padding(vertical = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = ex.uppercase(),
+                                color = if (isSel) Color.White else Color.Gray,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    }
+                }
+
                 // Two sides block (using Row with weights)
                 Row(
                     modifier = Modifier
@@ -958,47 +1112,32 @@ fun WorkoutScreen(viewModel: AriseViewModel) {
                         .fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    // Left Side: CAMERA VIEWPORT
-                    var hasCameraPermission by remember {
-                        mutableStateOf(
-                            androidx.core.content.ContextCompat.checkSelfPermission(
-                                context,
-                                android.Manifest.permission.CAMERA
-                            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-                        )
-                    }
-                    
-                    val cameraPermissionLauncher = rememberLauncherForActivityResult(
-                        contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
-                    ) { isGranted ->
-                        hasCameraPermission = isGranted
-                    }
-
+                    // Left Side: CAMERA VIEWPORT / SCANNER
                     Box(
                         modifier = Modifier
                             .weight(1.2f)
                             .fillMaxHeight()
                             .clip(RoundedCornerShape(16.dp))
                             .background(Color.Black)
-                            .border(2.dp, if (hasCameraPermission) ElectricBlue else Color.DarkGray, RoundedCornerShape(16.dp)),
+                            .border(2.dp, if (isCameraBlocked) SystemRed else ElectricBlue, RoundedCornerShape(16.dp)),
                         contentAlignment = Alignment.Center
                     ) {
-                        if (!hasCameraPermission) {
+                        if (isCameraBlocked) {
                             Column(
                                 modifier = Modifier.padding(12.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.Center
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.VideocamOff,
-                                    contentDescription = "Camera Access Required",
+                                    imageVector = Icons.Default.Error,
+                                    contentDescription = "Camera Locked Down",
                                     tint = SystemRed,
-                                    modifier = Modifier.size(36.dp)
+                                    modifier = Modifier.size(44.dp)
                                 )
                                 Spacer(modifier = Modifier.height(12.dp))
                                 Text(
-                                    text = "SCANNER OFFLINE",
-                                    color = Color.LightGray,
+                                    text = "🔒 SCANNERS ISOLATED",
+                                    color = SystemRed,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     fontFamily = FontFamily.Monospace,
@@ -1006,25 +1145,16 @@ fun WorkoutScreen(viewModel: AriseViewModel) {
                                 )
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
-                                    text = "Permission is required to verify push-ups form.",
-                                    color = Color.Gray,
+                                    text = "Camera scanners are disabled to isolate software bugs inside the matrix.",
+                                    color = Color.LightGray,
                                     fontSize = 9.sp,
                                     fontFamily = FontFamily.Monospace,
                                     textAlign = TextAlign.Center
                                 )
-                                Spacer(modifier = Modifier.height(16.dp))
-                                Button(
-                                    onClick = { cameraPermissionLauncher.launch(android.Manifest.permission.CAMERA) },
-                                    colors = ButtonDefaults.buttonColors(containerColor = ElectricBlue),
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                                ) {
-                                    Text("GRANT CAMERA", fontSize = 10.sp, color = Color.Black, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
-                                }
                             }
                         } else {
-                            // Camera granted. Render a beautiful animated scifi AI joint scanner view
+                            // Camera granted. Render scifi AI joint scanner view
                             Box(modifier = Modifier.fillMaxSize()) {
-                                // Real Camera preview mockup with animated scanning target
                                 val scanAnim = remember { androidx.compose.animation.core.Animatable(0f) }
                                 LaunchedEffect(Unit) {
                                     scanAnim.animateTo(
@@ -1040,12 +1170,10 @@ fun WorkoutScreen(viewModel: AriseViewModel) {
                                     val h = size.height
                                     val w = size.width
                                     
-                                    // Draw sci-fi green/blue camera grid lines
                                     drawRect(
                                         color = ElectricBlue.copy(alpha = 0.05f)
                                     )
                                     
-                                    // Draw animated scan line
                                     val lineY = h * scanAnim.value
                                     drawLine(
                                         color = ElectricBlue.copy(alpha = 0.8f),
@@ -1054,7 +1182,6 @@ fun WorkoutScreen(viewModel: AriseViewModel) {
                                         strokeWidth = 3f
                                     )
 
-                                    // Draw aesthetic target boxes representing facial mesh joints
                                     drawCircle(
                                         color = ElectricPurple.copy(alpha = 0.6f),
                                         radius = 8f,
@@ -1071,7 +1198,6 @@ fun WorkoutScreen(viewModel: AriseViewModel) {
                                         center = androidx.compose.ui.geometry.Offset(w * 0.6f, h * 0.5f)
                                     )
                                     
-                                    // Joint connection lines
                                     drawLine(
                                         color = Color.LightGray.copy(alpha = 0.4f),
                                         start = androidx.compose.ui.geometry.Offset(w * 0.5f, h * 0.3f),
@@ -1084,7 +1210,6 @@ fun WorkoutScreen(viewModel: AriseViewModel) {
                                     )
                                 }
 
-                                // Interactive Text overlays
                                 Column(
                                     modifier = Modifier
                                         .fillMaxSize()
@@ -1096,7 +1221,7 @@ fun WorkoutScreen(viewModel: AriseViewModel) {
                                         horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
                                         Text("REC ⏺️", color = SystemRed, fontSize = 9.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                                        Text("AI TRACKER COMPATIBLE", color = ElectricBlue, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                                        Text("AI TRACKER ACTIVE", color = ElectricBlue, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
                                     }
 
                                     Box(
@@ -1123,7 +1248,7 @@ fun WorkoutScreen(viewModel: AriseViewModel) {
                         }
                     }
 
-                    // Right Side: TARGET COUNTER & EXHAUSTION CONTROLS
+                    // Right Side: TARGET COUNTER & EXHAUSTION CONTROLS (With Auto-detection buttons!)
                     Column(
                         modifier = Modifier
                             .weight(1f)
@@ -1134,13 +1259,12 @@ fun WorkoutScreen(viewModel: AriseViewModel) {
                             colors = CardColors(DeepDarkGlass, Color.White, Color.Unspecified, Color.Unspecified),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .weight(1f)
                                 .border(1.dp, ElectricPurple.copy(alpha = 0.3f), RoundedCornerShape(12.dp)),
                         ) {
                             Column(
                                 modifier = Modifier
-                                    .padding(12.dp)
-                                    .fillMaxSize(),
+                                    .padding(8.dp)
+                                    .fillMaxWidth(),
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.Center
                             ) {
@@ -1151,21 +1275,20 @@ fun WorkoutScreen(viewModel: AriseViewModel) {
                                     fontWeight = FontWeight.Bold,
                                     fontFamily = FontFamily.Monospace
                                 )
-                                Spacer(modifier = Modifier.height(10.dp))
                                 Text(
                                     text = "$pushUpReps",
                                     color = ElectricBlue,
-                                    fontSize = 52.sp,
+                                    fontSize = 44.sp,
                                     fontWeight = FontWeight.Black,
                                     fontFamily = FontFamily.Monospace
                                 )
                                 Text(
                                     text = "/ $pushUpTarget",
                                     color = Color.Gray,
-                                    fontSize = 15.sp,
+                                    fontSize = 14.sp,
                                     fontFamily = FontFamily.Monospace
                                 )
-                                Spacer(modifier = Modifier.height(16.dp))
+                                Spacer(modifier = Modifier.height(10.dp))
 
                                 Button(
                                     onClick = {
@@ -1180,38 +1303,108 @@ fun WorkoutScreen(viewModel: AriseViewModel) {
                                         }
                                     },
                                     colors = ButtonDefaults.buttonColors(containerColor = ElectricBlue),
-                                    modifier = Modifier.fillMaxWidth()
+                                    modifier = Modifier.fillMaxWidth(),
+                                    contentPadding = PaddingValues(vertical = 4.dp)
                                 ) {
-                                    Text("⚡ TAP TO LOG REP", fontSize = 10.sp, color = Color.Black, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                                    Text("⚡ TAP TO LOG REP", fontSize = 9.sp, color = Color.Black, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        // Auto-Sense Controls Card
+                        val isAutoSensing by viewModel.isAutoSensingEnabled.collectAsState()
+                        val isSandbox by viewModel.isSandboxSensorSimulationEnabled.collectAsState()
+                        Card(
+                            colors = CardColors(DeepDarkGlass, Color.White, Color.Unspecified, Color.Unspecified),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .border(1.dp, ElectricPurple.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = "📡 AUTO-SENSE CHANNELS",
+                                    color = EpicGold,
+                                    fontSize = 8.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                                
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(if (isAutoSensing) ElectricBlue.copy(alpha = 0.15f) else Color.Black)
+                                        .clickable {
+                                            if (isAutoSensing) {
+                                                viewModel.stopAutoSensing()
+                                            } else {
+                                                viewModel.startAutoSensing(context)
+                                            }
+                                        }
+                                        .padding(6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = if (isAutoSensing) "📡 HW SENSOR: ON" else "📡 HW SENSOR: OFF",
+                                        color = if (isAutoSensing) ElectricBlue else Color.Gray,
+                                        fontSize = 8.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                }
+
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(if (isSandbox) ElectricPurple.copy(alpha = 0.15f) else Color.Black)
+                                        .clickable {
+                                            viewModel.setSandboxSimulationEnabled(!isSandbox)
+                                        }
+                                        .padding(6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = if (isSandbox) "🤖 AUTO-REPPING: ON" else "🤖 AUTO-REPPING: OFF",
+                                        color = if (isSandbox) ElectricPurple else Color.Gray,
+                                        fontSize = 8.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                }
+                            }
+                        }
 
                         // Recovery & Help
                         Column(
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Button(
                                 onClick = { viewModel.startPushUpRest() },
                                 colors = ButtonDefaults.buttonColors(containerColor = ElectricPurple),
                                 modifier = Modifier.fillMaxWidth(),
-                                enabled = !isPushUpResting
+                                enabled = !isPushUpResting,
+                                contentPadding = PaddingValues(vertical = 4.dp)
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(imageVector = Icons.Default.Restore, contentDescription = "Rest", modifier = Modifier.size(14.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("🚨 START REST TIMER", fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                                    Icon(imageVector = Icons.Default.Restore, contentDescription = "Rest", modifier = Modifier.size(12.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("🚨 START REST TIMER", fontSize = 9.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
                                 }
                             }
 
                             Button(
                                 onClick = { viewModel.completePushUpProtocol(pushUpTarget) },
                                 colors = ButtonDefaults.buttonColors(containerColor = EpicGold),
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.fillMaxWidth(),
+                                contentPadding = PaddingValues(vertical = 4.dp)
                             ) {
-                                Text("SYNC CLEAR (+50 XP)", fontSize = 9.sp, color = Color.Black, fontFamily = FontFamily.Monospace)
+                                Text("SYNC CLEAR (+50 XP)", fontSize = 8.sp, color = Color.Black, fontFamily = FontFamily.Monospace)
                             }
                         }
                     }
@@ -2534,6 +2727,81 @@ fun ProgressScreen(viewModel: AriseViewModel) {
                                 fontWeight = FontWeight.Bold
                             )
                         }
+                    }
+                }
+            }
+        }
+
+        // SYSTEM HEALTH & EMERGENCY VULNERABILITY MITIGATION VALVE
+        item {
+            val isSecMuted by viewModel.isSystemMutedWithBugs.collectAsState()
+            Card(
+                colors = CardColors(DeepDarkGlass, Color.White, Color.Unspecified, Color.Unspecified),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, if (isSecMuted) SystemRed.copy(alpha = 0.5f) else ElectricPurple.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp)
+                ) {
+                    Text(
+                        text = "🛠️ SUBSYSTEM HEALTH & BUG DEFENSE MITIGATION",
+                        color = if (isSecMuted) SystemRed else ElectricBlue,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Simulate software exceptions or bugs to deploy an automatic defensive shield. This blocks access to cameras, microphones, and screens for safety.",
+                        color = Color.Gray,
+                        fontSize = 10.sp,
+                        fontFamily = FontFamily.Monospace,
+                        lineHeight = 14.sp
+                    )
+                    Spacer(modifier = Modifier.height(14.dp))
+                    
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (isSecMuted) SystemRed.copy(alpha = 0.15f) else Color.Black.copy(alpha = 0.5f))
+                            .clickable {
+                                viewModel.triggerSystemBugCrashIsolation(!isSecMuted)
+                            }
+                            .border(1.dp, if (isSecMuted) SystemRed else Color.Transparent, RoundedCornerShape(8.dp))
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (isSecMuted) "🔒 SYSTEM SHIELD ISOLATED (BUG TRIGGERED)" else "🟢 SHIELD HEALTHY (ALL GATES SECURED)",
+                                color = if (isSecMuted) SystemRed else Color.Green,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = if (isSecMuted) "Subsystems are locked down: mic, camera, and HUD are offline." else "Normal operations clear. Subsystem channels healthy.",
+                                color = Color.LightGray,
+                                fontSize = 9.sp,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                        Switch(
+                            checked = isSecMuted,
+                            onCheckedChange = { active ->
+                                viewModel.triggerSystemBugCrashIsolation(active)
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = SystemRed,
+                                checkedTrackColor = SystemRed.copy(alpha = 0.3f),
+                                uncheckedThumbColor = Color.Gray,
+                                uncheckedTrackColor = Color.Black
+                            )
+                        )
                     }
                 }
             }
